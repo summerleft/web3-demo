@@ -4,8 +4,8 @@ pragma solidity ^0.8.18;
 import { IERC20 } from "../interface/IERC20.sol";
 
 // todo:
-// 一些边界条件的判断 
 // done:
+// 一些边界条件的判断 
 // 每次增发量不超过 1%
 // 每个人都可以授权、销毁代币
 // 增加量间隔为 1 年以上
@@ -64,6 +64,14 @@ contract MyERC20 is IERC20 {
         _;
     }
 
+    modifier validateBalance(address account, uint256 value) {
+        require(
+            _balanceOf[account] >= value,
+            "Balance is insufficient"
+        );
+        _;
+    }
+
     function mint(
         uint256 value
     ) external onlyOwner mintLimit(value) mintGapLimit {
@@ -88,14 +96,14 @@ contract MyERC20 is IERC20 {
         return _allowance[owner][spender];
     }
 
-    function transfer(address to, uint256 value) external returns (bool) {
+    function transfer(address to, uint256 value) external validateBalance(msg.sender, value) returns (bool) {
         _balanceOf[msg.sender] -= value;
         _balanceOf[msg.sender] += value;
         emit Transfer(msg.sender, to, value);
         return true;
     }
 
-    function approve(address spender, uint256 value) external returns (bool) {
+    function approve(address spender, uint256 value) external validateBalance(msg.sender, value) returns (bool) {
         _allowance[msg.sender][spender] = value;
         emit Approval(msg.sender, spender, value);
         return true;
@@ -105,7 +113,7 @@ contract MyERC20 is IERC20 {
         address from,
         address to,
         uint256 value
-    ) external returns (bool) {
+    ) external validateBalance(from, value) returns (bool) {
         _allowance[from][msg.sender] -= value;
         _balanceOf[from] -= value;
         _balanceOf[to] += value;
@@ -113,10 +121,16 @@ contract MyERC20 is IERC20 {
         return true;
     }
 
-    // todo 被approve的账户也可以销毁
-    function burn(uint256 value) external {
-        _balanceOf[msg.sender] -= value;
+    function burn(uint256 value, address account) external validateBalance(account, value) {
+        if (msg.sender != account) {
+            require(
+                _allowance[account][msg.sender] >= value,
+                "Cannot burn tokens more than allowed"
+            );
+            _allowance[account][msg.sender] -= value;
+        }
+        _balanceOf[account] -= value;
         _totalSupply -= value;
-        emit Transfer(msg.sender, address(0), value);
+        emit Transfer(account, address(0), value);
     }
 }
